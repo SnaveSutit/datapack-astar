@@ -1,0 +1,15 @@
+
+function load {
+	scoreboard players set #worldborder.maxsize aS.v 59999968
+}
+
+function start {
+	worldborder set 59999968
+	worldborder set 59997968 2
+}
+
+function update {
+	# Updates the worldborder.ms score to the current worldborder time in ms.
+	execute store result score #worldborder.ms aS.v run worldboarder get
+	scoreboard players operation #worldborder.ms aS.v -= #worldborder.maxsize aS.v
+}

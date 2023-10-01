@@ -1,0 +1,82 @@
+
+function load {
+	scoreboard objectives add heap.v dummy
+	scoreboard objectives add heap.value dummy
+	scoreboard objectives add heap.index dummy
+
+	scoreboard players set 1 heap.v 1
+	scoreboard players set 2 heap.v 2
+
+	# data modify storage heap:heaps all set value {}
+}
+
+function create_heap {
+	# Args {name: string}
+	$data modify storage heap:heaps all.$(name) set value []
+}
+
+function load_heap {
+	# Args {name: string}
+	$data modify storage heap:heaps loaded set from storage heap:heaps all.$(name)
+}
+
+function store_heap {
+	# Args {name: string}
+	$data modify storage heap:heaps all.$(name) set from storage heap:heaps loaded
+}
+
+function get_item {
+	# Args {index: int}
+	data remove storage heap:temp item
+	$data modify storage heap:temp item set from storage heap:heaps loaded[$(index)]
+}
+
+function get_parent {
+	# Args {index: int}
+	data remove storage heap:temp parent
+	$data modify storage heap:temp parent set from storage heap:heaps loaded[$(index)]
+}
+
+function entity_to_item {
+	
+}
+
+function sort_up {
+	# Args {entity: uuid}
+
+	# Get heap size
+	execute store result score #size heap.v if data storage heap:heaps loaded[]
+
+	# Get item index
+	$scoreboard players operation #index heap.v = $(entity) heap.index
+
+	# Get item value
+	execute store result storage heap:temp args.index int 1 run scoreboard players get #index heap.v
+	function heap:get_item with storage heap:temp args
+	execute store result score #value heap.v run data get storage heap:temp item.value
+
+	# Get parent index
+	scoreboard players operation #parent_index heap.v = #index heap.index
+	scoreboard players operation #parent_index heap.v -= 1 heap.v
+	scoreboard players operation #parent_index heap.v /= 2 heap.v
+
+	# Get parent value
+	execute store result storage heap:temp args.index int 1 run scoreboard players get #parent_index heap.v
+	function heap:get_parent with storage heap:temp args
+	execute store result score #parent_value heap.v run data get storage heap:temp parent.value
+
+	# Compare value
+	execute if score #value heap.v < #parent_value heap.v run {
+		data modify storage heap:temp args.item 
+		function heap:swap with storage heap:temp args
+	}
+}
+
+function swap {
+	# Scores #index, #parent_index
+	# Args {item: uuid, parent: uuid}
+}
+
+function sort_down {
+	# Args {entity: uuid}
+}
