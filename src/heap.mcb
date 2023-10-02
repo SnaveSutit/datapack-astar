@@ -1,5 +1,9 @@
+import log.mcbm
 
 function load {
+	log SETNAME ["[", {"text":"Heap", "color": "aqua"}, "]"]
+
+	scoreboard objectives add mcb.i dummy
 	scoreboard objectives add heap.v dummy
 	scoreboard objectives add heap.value dummy
 	scoreboard objectives add heap.index dummy
@@ -8,6 +12,26 @@ function load {
 	scoreboard players set 2 heap.v 2
 
 	# data modify storage heap:heaps all set value {}
+}
+
+function test {
+	kill @e[type=minecraft:marker,tag=test]
+
+	function heap:create_heap {name: 'test'}
+	function heap:load_heap {name: 'test'}
+
+	log info json "Item 1"
+
+	LOOP(3, i) {
+		summon minecraft:marker ~ ~ ~ {UUID: [I;0,0,0,<%i%>], Tags: ['test','new']}
+		execute as @e[type=marker,tag=new,limit=1,distance=..0.1] run {
+			tag @s remove new
+			scoreboard players set @s heap.value <%Math.round(Math.random() * 100)%>
+			function string_uuid:get
+			data modify storage heap:temp item_uuid set from storage string_uuid:output UUID
+			function heap:add with storage heap:temp
+		}
+	}
 }
 
 function create_heap {
@@ -25,58 +49,184 @@ function store_heap {
 	$data modify storage heap:heaps all.$(name) set from storage heap:heaps loaded
 }
 
-function get_item {
-	# Args {index: int}
-	data remove storage heap:temp item
-	$data modify storage heap:temp item set from storage heap:heaps loaded[$(index)]
+LOOP(['item', 'parent'], i) {
+	function get_uuid_<%i%> {
+		# Args {index: int}
+		data remove storage heap:temp <%i%>_uuid
+		$data modify storage heap:temp <%i%>_uuid set from storage heap:heaps loaded[$(index)]
+	}
+
+	function set_entity_index_<%i%> {
+		# Args {<%i%>_uuid: uuid}
+		$scoreboard players operation $(<%i%>_uuid) heap.index = #<%i%>_index heap.v
+	}
+
+	function set_entity_value_<%i%> {
+		# Args {<%i%>_uuid: uuid}
+		$scoreboard players operation $(<%i%>_uuid) heap.value = #<%i%>_value heap.v
+	}
+
+	function set_entity_data_<%i%> {
+		# Args {<%i%>_uuid: uuid}
+		$scoreboard players operation $(<%i%>_uuid) heap.index = #<%i%>_index heap.v
+		$scoreboard players operation $(<%i%>_uuid) heap.value = #<%i%>_value heap.v
+	}
+
+	function get_entity_index_<%i%> {
+		# Args {<%i%>_uuid: uuid}
+		$scoreboard players operation #<%i%>_index heap.v = $(<%i%>_uuid) heap.index
+	}
+
+	function get_entity_value_<%i%> {
+		# Args {<%i%>_uuid: uuid}
+		$scoreboard players operation #<%i%>_value heap.v = $(<%i%>_uuid) heap.value
+	}
+
+	function get_entity_data_<%i%> {
+		# Args {<%i%>_uuid: uuid}
+		$scoreboard players operation #<%i%>_index heap.v = $(<%i%>_uuid) heap.index
+		$scoreboard players operation #<%i%>_value heap.v = $(<%i%>_uuid) heap.value
+	}
 }
 
-function get_parent {
-	# Args {index: int}
-	data remove storage heap:temp parent
-	$data modify storage heap:temp parent set from storage heap:heaps loaded[$(index)]
-}
-
-function entity_to_item {
-	
-}
-
-function sort_up {
-	# Args {entity: uuid}
+function add {
+	# Args {item_uuid: uuid}
 
 	# Get heap size
 	execute store result score #size heap.v if data storage heap:heaps loaded[]
 
-	# Get item index
-	$scoreboard players operation #index heap.v = $(entity) heap.index
+	# Add item to heap
+	$data modify storage heap:heaps loaded append value "$(item_uuid)"
 
-	# Get item value
-	execute store result storage heap:temp args.index int 1 run scoreboard players get #index heap.v
-	function heap:get_item with storage heap:temp args
-	execute store result score #value heap.v run data get storage heap:temp item.value
+	# Get new size
+	scoreboard players operation #new_size heap.v = #size heap.v
+	scoreboard players operation #new_size heap.v += 1 heap.v
+
+	# Set item data
+	scoreboard players operation #item_index heap.v = #size heap.v
+	$function heap:set_entity_index_item {item_uuid: "$(item_uuid)"}
+
+	# Sort up
+	$function heap:sort_up {item_uuid: "$(item_uuid)"}
+}
+
+function sort_up {
+	# Args {item_uuid: uuid}
+
+	log info json "Sorting up"
+
+	# Get item data
+	$function heap:get_entity_value_item {item_uuid: "$(item_uuid)"}
+
+	execute if score #item_index heap.v matches ..0 run log info json "Item is root"
+	execute if score #item_index heap.v matches ..0 run return 0
 
 	# Get parent index
-	scoreboard players operation #parent_index heap.v = #index heap.index
+	scoreboard players operation #parent_index heap.v = #item_index heap.v
 	scoreboard players operation #parent_index heap.v -= 1 heap.v
-	scoreboard players operation #parent_index heap.v /= 2 heap.v
+	execute store result storage heap:temp index int 1 run scoreboard players operation #parent_index heap.v /= 2 heap.v
 
-	# Get parent value
-	execute store result storage heap:temp args.index int 1 run scoreboard players get #parent_index heap.v
-	function heap:get_parent with storage heap:temp args
-	execute store result score #parent_value heap.v run data get storage heap:temp parent.value
+	log info score #item_index heap.v
+	log info score #parent_index heap.v
+
+	# Get parent data
+	function heap:get_uuid_parent with storage heap:temp
+	function heap:get_entity_value_parent with storage heap:temp
+
+	log info score #item_value heap.v
+	log info score #parent_value heap.v
 
 	# Compare value
-	execute if score #value heap.v < #parent_value heap.v run {
-		data modify storage heap:temp args.item 
-		function heap:swap with storage heap:temp args
+	execute (if score #item_value heap.v < #parent_value heap.v) {
+		log info json "item is smaller than parent, swapping..."
+		execute store result storage heap:temp item_index int 1 run scoreboard players get #item_index heap.v
+		execute store result storage heap:temp parent_index int 1 run scoreboard players get #parent_index heap.v
+		function heap:swap with storage heap:temp
+		data modify storage heap:temp item_index set from storage heap:temp parent_index
+		function heap:sort_up with storage heap:temp
+	} else {
+		log info json "item is bigger than parent, done sorting up."
 	}
 }
 
 function swap {
-	# Scores #index, #parent_index
-	# Args {item: uuid, parent: uuid}
+	# Scores #item_index, #parent_index
+	# Args {item_uuid: uuid, parent_uuid: uuid, item_index: int, parent_index: int}
+	$tellraw @a ["Swapping!\n", \
+		" Item: ", "$(item_index)(", {"score": {"name": "#item_value", "objective": "heap.v"}}, ")", \
+		"\n Parent: ", "$(parent_index)(", {"score": {"name": "#parent_value", "objective": "heap.v"}}, ")" \
+	]
+	$scoreboard players set $(item_uuid) heap.index $(parent_index)
+	$scoreboard players set $(parent_uuid) heap.index $(item_index)
+	$data modify storage heap:heaps loaded[$(item_index)] set value "$(parent_uuid)"
+	$data modify storage heap:heaps loaded[$(parent_index)] set value "$(item_uuid)"
 }
 
 function sort_down {
 	# Args {entity: uuid}
+}
+
+function visualize_heap {
+	kill @e[type=minecraft:text_display,tag=heap_display]
+
+	# Get heap item count
+	execute store result score #heap_size heap.v if data storage heap:heaps loaded[]
+
+	# Generate heap visualization
+	summon minecraft:text_display ~ ~ ~ {Tags:['heap_display','new']}
+	execute as @e[type=text_display,tag=new,limit=1,distance=..0.1] run function heap:build_heap {item_index: 0}
+}
+
+function build_heap {
+	tag @s remove new
+	$data modify storage heap:temp item_uuid set from storage heap:heaps loaded[$(item_index)]
+	function heap:get_entity_data_item with storage heap:temp
+	data modify entity @s text set value '[{"score":{"name":"#item_value","objective":"heap.v"}}]'
+
+	log info score #item_index heap.v
+	log info score #item_value heap.v
+
+	$scoreboard players set #child1_index heap.v $(item_index)
+	scoreboard players operation #child1_index heap.v *= 2 heap.v
+	scoreboard players operation #child1_index heap.v += 1 heap.v
+
+	scoreboard players set #distance heap.v 10
+	# scoreboard players operation #distance heap.v = #heap_size heap.v
+	# scoreboard players operation #distance heap.v -= #item_index heap.v
+
+	log info score #child1_index heap.v
+	log info score #heap_size heap.v
+	log info score #distance heap.v
+
+	execute if score #child1_index heap.v < #heap_size heap.v positioned ~ ~.2 ~ run {
+		scoreboard players remove #distance heap.v 1
+		execute if score #distance heap.v matches 0 run {
+			say child1 exists
+			summon minecraft:text_display ~ ~ ~ {Tags:['heap_display','new']}
+			execute store result storage heap:temp item_index int 1 run scoreboard players get #child1_index heap.v
+			execute as @e[type=text_display,tag=new,limit=1,distance=..0.1] run function heap:build_heap with storage heap:temp
+		}
+		execute if score #distance heap.v matches 1.. positioned ~.2 ~ ~ run function $block
+	}
+
+	# $scoreboard players set #child2_index heap.v $(item_index)
+	# scoreboard players operation #distance heap.v = #heap_size heap.v
+	# scoreboard players operation #distance heap.v -= #child2_index heap.v
+
+	# scoreboard players operation #child2_index heap.v *= 2 heap.v
+	# scoreboard players operation #child2_index heap.v += 2 heap.v
+
+
+	# execute if score #child2_index heap.v < #heap_size heap.v positioned ~ ~.2 ~ run {
+	# 	scoreboard players remove #distance heap.v 1
+	# 	execute if score #distance heap.v matches 0 run {
+	# 		log info score #child2_index heap.v
+	# 		log info score #heap_size heap.v
+	# 		say child2 exists
+	# 		summon minecraft:text_display ~ ~ ~ {Tags:['heap_display','new']}
+	# 		execute store result storage heap:temp item_index int 1 run scoreboard players get #child2_index heap.v
+	# 		execute as @e[type=text_display,tag=new,limit=1,distance=..0.1] run function heap:build_heap with storage heap:temp
+	# 	}
+	# 	execute if score #distance heap.v matches 1.. positioned ~-.2 ~ ~ run function $block
+	# }
 }

@@ -1,4 +1,4 @@
-
+import log.mcbm
 # 10360b5a-27d5-480f-b335-4c58e679072b
 
 function load {
@@ -60,7 +60,7 @@ dir _ {
 			scoreboard players set #aS.global_min_h aS.v 2147483647
 			scoreboard players set #aS.global_min_g aS.v 2147483647
 
-			execute summon minecraft:marker ~ ~ ~ run {
+			execute summon minecraft:marker run {
 				tag @s add aS.start
 				tag @s add aS.node
 				tag @s add aS.next
@@ -73,7 +73,7 @@ dir _ {
 
 	dir node {
 		function create {
-			execute summon minecraft:marker ~ ~ ~ run {
+			execute summon minecraft:marker run {
 				tag @s add aS.node
 				function astar:_/node/calculate
 			}

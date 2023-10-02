@@ -10,6 +10,6 @@ function start {
 
 function update {
 	# Updates the worldborder.ms score to the current worldborder time in ms.
-	execute store result score #worldborder.ms aS.v run worldboarder get
+	execute store result score #worldborder.ms aS.v run worldborder get
 	scoreboard players operation #worldborder.ms aS.v -= #worldborder.maxsize aS.v
 }
