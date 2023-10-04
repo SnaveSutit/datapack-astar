@@ -1,6 +1,8 @@
 
 function load {
+	scoreboard objectives add mcb.i dummy
 	scoreboard players set #worldborder.maxsize aS.v 59999968
+	scoreboard players set -1 aS.v -1
 }
 
 function start {
@@ -12,4 +14,5 @@ function update {
 	# Updates the worldborder.ms score to the current worldborder time in ms.
 	execute store result score #worldborder.ms aS.v run worldborder get
 	scoreboard players operation #worldborder.ms aS.v -= #worldborder.maxsize aS.v
+	scoreboard players operation #worldborder.ms aS.v *= -1 aS.v
 }

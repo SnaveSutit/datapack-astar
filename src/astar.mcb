@@ -3,6 +3,7 @@ import log.mcbm
 
 function load {
 	# Objectives
+	scoreboard objectives add mcb.i dummy
 	scoreboard objectives add aS.v dummy
 	scoreboard objectives add aS.node.id dummy ["", {"text": "A*", "color": "green"}, {"text": "Node ID"}]
 	scoreboard objectives add aS.node.pid dummy ["", {"text": "A*", "color": "green"}, {"text": "Node Parent ID"}]

@@ -3,8 +3,8 @@
 		{
 			"name": "lang-mc/stable",
 			"remote": {
-				"type": "github",
-				"owner": "mc-build"
+				"type": "file",
+				"path": "D:/github-repos/lang-mc"
 			}
 		},
 		{
