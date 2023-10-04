@@ -11,7 +11,7 @@ function load {
 	scoreboard players set 1 heap.v 1
 	scoreboard players set 2 heap.v 2
 
-	gamerule maxCommandChainLength <%Math.round(2147483647 / 2)%>
+	gamerule maxCommandChainLength 262136
 
 	function heap:test_sort_up
 }
@@ -26,7 +26,7 @@ function test_sort_up {
 		name add_test_item
 		execute summon minecraft:marker run {
 			tag @s add test
-			execute store result score @s heap.value run random value 0..9999
+			execute store result score @s heap.value run random value 0..99
 			# tellraw @a ["Adding item ", {"score": {"name": "@s", "objective": "heap.value"}}, " to heap"]
 			function string_uuid:get
 			data modify storage heap:temp item_uuid set from storage string_uuid:output UUID
@@ -34,14 +34,14 @@ function test_sort_up {
 			# schedule function heap:_test_visualize 1t
 		}
 	}
-	# LOOP(999, i) {
-	# 	function heap:add_test_item
-	# }
+	LOOP(20, i) {
+		function heap:add_test_item
+	}
 }
 
-# function _test_visualize {
-# 	execute positioned 0 1 0 run function heap:visualize_heap
-# }
+function _test_visualize {
+	execute positioned 0 1 0 run function heap:visualize_heap
+}
 
 # function test_sort_down {
 # 	function worldborder:start

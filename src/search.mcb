@@ -1,0 +1,169 @@
+import ./log.mcbm
+
+function load {
+	log SETNAME {"text": "Search", "color":"yellow"}
+	scoreboard objectives add search.v dummy
+}
+
+blocks can_path_on {
+	minecraft:gray_concrete
+	minecraft:red_concrete
+	minecraft:lime_concrete
+}
+
+blocks can_path_through {
+	minecraft:air
+	minecraft:cave_air
+	minecraft:void_air
+}
+
+function test {
+	data modify storage search:path start set value [15d, 1d, 18d]
+	data modify storage search:path end set value [15d, 1d, 12d]
+
+	summon minecraft:marker ~ ~ ~ {Tags:['search.position', 'new']}
+	execute as @e[type=marker,limit=1,tag=new,distance=..0.1] run {
+		tag @s remove new
+		data modify entity @s Pos set from storage search:path start
+		execute at @s align xyz positioned ~.5 ~.5 ~.5 run function search:start
+		kill @s
+	}
+}
+
+function start {
+
+	scoreboard players set #search.state search.v 0
+
+	function search:reset_explored
+	data modify storage search:path stack set value []
+
+	execute store result score #start.x search.v run data get storage search:path start[0]
+	execute store result score #start.y search.v run data get storage search:path start[1]
+	execute store result score #start.z search.v run data get storage search:path start[2]
+
+	execute store result score #end.x search.v run data get storage search:path end[0]
+	execute store result score #end.y search.v run data get storage search:path end[1]
+	execute store result score #end.z search.v run data get storage search:path end[2]
+
+	execute store result storage search:path args.current_x int 1 run scoreboard players operation #current.x search.v = #start.x search.v
+	execute store result storage search:path args.current_y int 1 run scoreboard players operation #current.y search.v = #start.y search.v
+	execute store result storage search:path args.current_z int 1 run scoreboard players operation #current.z search.v = #start.z search.v
+
+	{
+		function search:check_explored with storage search:path args
+		# execute if score #found search.v matches 1 run say Already explored!
+		execute if score #found search.v matches 1 run return 0
+
+		function search:store_explored with storage search:path args
+		function search:add_to_stack with storage search:path args
+
+		particle minecraft:block_marker barrier ~ ~ ~ 0 0 0 0 1 force
+
+		execute \
+			if score #search.state search.v matches 0 \
+			if score #current.x search.v = #end.x search.v \
+			if score #current.y search.v = #end.y search.v \
+			if score #current.z search.v = #end.z search.v \
+		run {
+			scoreboard players set #search.state search.v 1
+			log info data storage search:path stack
+		}
+		execute if score #search.state search.v matches 1 run say Found path!
+		execute if score #search.state search.v matches 1 run return 0
+
+		execute \
+			if score #search.state search.v matches 0 \
+			positioned ~1 ~ ~ \
+			if block ~ ~-1 ~ #search:can_path_on \
+			if block ~ ~ ~ #search:can_path_through \
+		run {
+			execute store result storage search:path args.current_x int 1 run scoreboard players add #current.x search.v 1
+			function $parent
+			execute store result storage search:path args.current_x int 1 run scoreboard players remove #current.x search.v 1
+		}
+
+		execute \
+			if score #search.state search.v matches 0 \
+			positioned ~-1 ~ ~ \
+			if block ~ ~-1 ~ #search:can_path_on \
+			if block ~ ~ ~ #search:can_path_through \
+		run {
+			execute store result storage search:path args.current_x int 1 run scoreboard players remove #current.x search.v 1
+			function $parent
+			execute store result storage search:path args.current_x int 1 run scoreboard players add #current.x search.v 1
+		}
+
+		execute \
+			if score #search.state search.v matches 0 \
+			positioned ~ ~ ~1 \
+			if block ~ ~-1 ~ #search:can_path_on \
+			if block ~ ~ ~ #search:can_path_through \
+		run {
+			execute store result storage search:path args.current_z int 1 run scoreboard players add #current.z search.v 1
+			function $parent
+			execute store result storage search:path args.current_z int 1 run scoreboard players remove #current.z search.v 1
+		}
+
+		execute \
+			if score #search.state search.v matches 0 \
+			positioned ~ ~ ~-1 \
+			if block ~ ~-1 ~ #search:can_path_on \
+			if block ~ ~ ~ #search:can_path_through \
+		run {
+			execute store result storage search:path args.current_z int 1 run scoreboard players remove #current.z search.v 1
+			function $parent
+			execute store result storage search:path args.current_z int 1 run scoreboard players add #current.z search.v 1
+		}
+
+		execute if score #search.state search.v matches 0 run data remove storage search:path stack[-1]
+	}
+}
+
+function add_to_stack {
+	# args { current_x: int, current_y: int, current_z: int }
+	$data modify storage search:path stack append value {x: $(current_x), y: $(current_y), z: $(current_z)}
+}
+
+function reset_explored {
+	data modify storage search:ram explored set value {}
+}
+
+function store_explored {
+	# args { current_x: int, current_y: int, current_z: int }
+	$data modify storage search:ram explored.$(current_x)_$(current_y)_$(current_z) set value 1b
+}
+
+function check_explored {
+	# args { current_x: int, current_y: int, current_z: int }
+	$execute store success score #found search.v run data get storage search:ram explored.$(current_x)_$(current_y)_$(current_z)
+	# returns #found search.v
+}
+
+function display_stack {
+	kill @e[tag=search.stack]
+
+	# Copy stack
+	data modify storage search:temp stack set from storage search:path stack
+
+	# Get stack size
+	execute store result score #stack.size search.v if data storage search:temp stack[]
+
+	{
+		summon minecraft:item_display ~ ~ ~ {Tags:['search.stack','new'],item:{id:"minecraft:stone",Count:1b}}
+		execute as @e[type=minecraft:item_display,tag=new,limit=1,distance=..0.1] run {
+			tag @s remove new
+			data modify entity @s transformation.scale set value [0.5f, 0.5f, 0.5f]
+			data modify storage search:temp Pos set value [0d, 0d, 0d]
+			execute store result storage search:temp Pos[0] double 1 run data get storage search:temp stack[0].x
+			execute store result storage search:temp Pos[1] double 1 run data get storage search:temp stack[0].y
+			execute store result storage search:temp Pos[2] double 1 run data get storage search:temp stack[0].z
+			data modify entity @s Pos set from storage search:temp Pos
+			# log info data entity @s Pos
+			execute at @s positioned ~.5 ~.5 ~.5 run tp @s ~ ~ ~
+		}
+		data remove storage search:temp stack[0]
+		scoreboard players remove #stack.size search.v 1
+		execute if score #stack.size search.v matches 1.. run schedule function $block 1t
+	}
+	# data remove storage search:temp stack
+}

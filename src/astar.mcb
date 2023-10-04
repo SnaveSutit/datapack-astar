@@ -1,36 +1,48 @@
 import log.mcbm
 # 10360b5a-27d5-480f-b335-4c58e679072b
 
+function uninstall {
+	scoreboard objectives remove mcb.i
+	scoreboard objectives remove aS.v
+	scoreboard objectives remove aS.node.id
+	scoreboard objectives remove aS.node.f
+	scoreboard objectives remove aS.node.h
+	scoreboard objectives remove aS.node.g
+	scoreboard objectives remove aS.node.x
+	scoreboard objectives remove aS.node.y
+	scoreboard objectives remove aS.node.z
+}
+
 function load {
 	# Objectives
 	scoreboard objectives add mcb.i dummy
 	scoreboard objectives add aS.v dummy
-	scoreboard objectives add aS.node.id dummy ["", {"text": "A*", "color": "green"}, {"text": "Node ID"}]
-	scoreboard objectives add aS.node.pid dummy ["", {"text": "A*", "color": "green"}, {"text": "Node Parent ID"}]
-	scoreboard objectives add aS.node.f dummy ["", {"text": "A*", "color": "green"}, {"text": "Node F Cost"}]
-	scoreboard objectives add aS.node.h dummy ["", {"text": "A*", "color": "green"}, {"text": "Node H Cost"}]
-	scoreboard objectives add aS.node.g dummy ["", {"text": "A*", "color": "green"}, {"text": "Node G Cost"}]
+	scoreboard objectives add aS.node.id dummy [{"text": "", "color": "gray"}, {"text": "A*", "color": "green"}, " node", {"text": ".", "color": "dark_gray"}, {"text": "id", "color": "yellow"}]
+	scoreboard objectives add aS.node.f dummy [{"text": "", "color": "gray"}, {"text": "A*", "color": "green"}, " node", {"text": ".", "color": "dark_gray"}, {"text": "f", "color": "gold"}]
+	scoreboard objectives add aS.node.h dummy [{"text": "", "color": "gray"}, {"text": "A*", "color": "green"}, " node", {"text": ".", "color": "dark_gray"}, {"text": "h", "color": "light_purple"}]
+	scoreboard objectives add aS.node.g dummy [{"text": "", "color": "gray"}, {"text": "A*", "color": "green"}, " node", {"text": ".", "color": "dark_gray"}, {"text": "g", "color": "aqua"}]
 
-	scoreboard objectives add aS.node.x dummy ["", {"text": "A*", "color": "green"}, {"text": "Node X Pos"}]
-	scoreboard objectives add aS.node.y dummy ["", {"text": "A*", "color": "green"}, {"text": "Node Y Pos"}]
-	scoreboard objectives add aS.node.z dummy ["", {"text": "A*", "color": "green"}, {"text": "Node Z Pos"}]
-
+	scoreboard objectives add aS.node.x dummy [{"text": "", "color": "gray"}, {"text": "A*", "color": "green"}, " node", {"text": ".", "color": "dark_gray"}, {"text": "x", "color": "red"}]
+	scoreboard objectives add aS.node.y dummy [{"text": "", "color": "gray"}, {"text": "A*", "color": "green"}, " node", {"text": ".", "color": "dark_gray"}, {"text": "y", "color": "green"}]
+	scoreboard objectives add aS.node.z dummy [{"text": "", "color": "gray"}, {"text": "A*", "color": "green"}, " node", {"text": ".", "color": "dark_gray"}, {"text": "z", "color": "blue"}]
 
 	# Variables
 	scoreboard players add #aS.last_path_id aS.v 0
 
-	scoreboard players set $astar.max_mspt aS.v 20
-	scoreboard players set $aS.straight_movement_cost aS.v 10
-	scoreboard players set $aS.diagonal_movement_cost aS.v 14
-	scoreboard players set $aS.vertical_movement_cost aS.v 14
-	scoreboard players set $astar.default_max_closed_nodes aS.v 1000
+	scoreboard players set $aS.max_mspt aS.v 20
+	scoreboard players set $aS.orthogonal_cost aS.v 10
+	scoreboard players set $aS.diagonal_cost aS.v 14
+	scoreboard players set $aS.vertical_cost aS.v 14
+	scoreboard players set $aS.default_max_closed_nodes aS.v 1000
 
 	scoreboard players add #aS.state aS.v 0
 
 	# Constants
+	scoreboard players set #-1 aS.v -1
 	scoreboard players set #2 aS.v 2
 	scoreboard players set #4 aS.v 4
 	scoreboard players set #8 aS.v 8
+	scoreboard players set #10 aS.v 10
 	scoreboard players set #16 aS.v 16
 	scoreboard players set #32 aS.v 32
 	scoreboard players set #64 aS.v 64
@@ -39,12 +51,28 @@ function load {
 	execute unless data storage astar:_ queue run data modify storage astar:_ queue set value []
 }
 
+dir debug {
+	function map_h_cost {
+		kill @e[tag=aS.debug]
+		LOOP(11, x) {
+			LOOP(11, z) {
+				execute positioned <%x-5%> <%1%> <%z-5%> summon minecraft:text_display run {
+					tag @s add aS.debug
+					function astar:_/node/calculate
+					data modify entity @s text set value '[{"score":{"name":"@s","objective":"aS.node.h"}}, " ", {"score":{"name":"@s","objective":"aS.node.g"}}, "\\n", {"score":{"name":"@s","objective":"aS.node.f"}}]'
+					data modify entity @s transformation.right_rotation set value {axis:[1, 0, 0], angle:-1.5}
+					data modify entity @s transformation.translation set value [0f,0f,0.25f]
+					data modify entity @s background set value 0
+				}
+			}
+		}
+	}
+}
+
 function queue_path {
-	# Args {start: [0, 0, 0], end: [0, 0, 0], callback_uuid: "uuid"}
-	data remove storage astar:_ new_path
-	$data modify storage astar:_ new_path set value {id: -1, start: $(start), end: $(end), callback_uuid: $(callback_uuid)}
-	execute store result storage astar:_ new_path.id int 1 run scoreboard players add #aS.last_path_id aS.v 1
-	data modify storage astar:_ queue append from storage astar:_ new_path
+	execute store result storage astar:input new_path.id int 1 run scoreboard players add #aS.last_path_id aS.v 1
+	data modify storage astar:_ queue append from storage astar:input new_path
+	data remove storage astar:input new_path
 }
 
 function clear_queue {
@@ -53,13 +81,13 @@ function clear_queue {
 }
 
 dir _ {
-
 	dir search {
 		function start {
-			# Args {id: int, start: [0, 0, 0], end: [0, 0, 0], callback_uuid: "uuid"}
-			scoreboard players set #aS.global_min_f aS.v 2147483647
-			scoreboard players set #aS.global_min_h aS.v 2147483647
-			scoreboard players set #aS.global_min_g aS.v 2147483647
+			#$ INPUT: {path: {id: int, start: [int, int, int], end: [int, int, int], callback_uuid: "uuid"}}
+
+			execute store result score #aS.end.x aS.v run data get storage astar:_ path.end[0]
+			execute store result score #aS.end.y aS.v run data get storage astar:_ path.end[1]
+			execute store result score #aS.end.z aS.v run data get storage astar:_ path.end[2]
 
 			execute summon minecraft:marker run {
 				tag @s add aS.start
@@ -74,111 +102,89 @@ dir _ {
 
 	dir node {
 		function create {
-			execute summon minecraft:marker run {
-				tag @s add aS.node
-				function astar:_/node/calculate
-			}
+		}
+
+		function test {
+			scoreboard players set #aS.end.x aS.v 0
+			scoreboard players set #aS.end.y aS.v 1
+			scoreboard players set #aS.end.z aS.v 0
+
+			function astar:_/node/calculate
 		}
 
 		function calculate {
-			# Node ID
-			execute store result score @s aS.node.id run scoreboard players add #aS.last_node_id aS.v 1
-			# Parent ID
-			scoreboard players operation @s aS.node.pid = #aS.parent.id aS.v
-			# Set xyz
-			# Since reading/writing storage is ~4x faster than the same operations on an entity's data we store the pos into storage before storing it into scores
-			data modify storage astar:ram this.pos set from entity @s Pos
-			execute store result score @s aS.node.x run data get storage astar:ram this.pos[0]
-			execute store result score @s aS.node.y run data get storage astar:ram this.pos[1]
-			execute store result score @s aS.node.z run data get storage astar:ram this.pos[2]
+			data modify storage astar:_ Pos set from entity @s Pos
+			execute store result score #diff_mid aS.v store result score @s aS.node.x run data get storage astar:_ Pos[0]
+			execute store result score #dy aS.v store result score @s aS.node.y run data get storage astar:_ Pos[1]
+			execute store result score #dz aS.v store result score @s aS.node.z run data get storage astar:_ Pos[2]
 
-			#> Calculate Heuristic
-			# Set temp xyz
-			scoreboard players operation #x aS.v = @s aS.node.x
-			scoreboard players operation #y aS.v = @s aS.node.y
-			scoreboard players operation #z aS.v = @s aS.node.z
+			# Calculate the difference between the current node and the end node
+			scoreboard players operation #diff_mid aS.v -= #aS.end.x aS.v
+			scoreboard players operation #dy aS.v -= #aS.end.y aS.v
+			scoreboard players operation #dz aS.v -= #aS.end.z aS.v
 
-			# Diff
-			scoreboard players operation #x aS.v -= #aS.path.end.x aS.v
-			scoreboard players operation #y aS.v -= #aS.path.end.y aS.v
-			scoreboard players operation #z aS.v -= #aS.path.end.z aS.v
+			# Get the absolute value of the difference
+			execute if score #diff_mid aS.v matches ..-1 run scoreboard players operation #diff_mid aS.v *= #-1 aS.v
+			execute if score #dy aS.v matches ..-1 run scoreboard players operation #dy aS.v *= #-1 aS.v
+			execute if score #dz aS.v matches ..-1 run scoreboard players operation #dz aS.v *= #-1 aS.v
 
-			# Absolute Value
-			execute if score #x aS.v matches ..-1 run scoreboard players operation #x aS.v *= #-1 aS.v
-			execute if score #y aS.v matches ..-1 run scoreboard players operation #y aS.v *= #-1 aS.v
-			execute if score #z aS.v matches ..-1 run scoreboard players operation #z aS.v *= #-1 aS.v
+			# Get the smallest value of the difference
+			scoreboard players operation #diff_min aS.v = #diff_mid aS.v
+			scoreboard players operation #diff_min aS.v < #dy aS.v
+			scoreboard players operation #diff_min aS.v < #dz aS.v
 
-			# Get smallist axis
-			scoreboard players set #dmin aS.v 2147483647
-			scoreboard players operation #dmin aS.v < #x aS.v
-			scoreboard players operation #dmin aS.v < #y aS.v
-			scoreboard players operation #dmin aS.v < #z aS.v
+			# Get the largest value of the difference
+			scoreboard players operation @s aS.node.h = #diff_mid aS.v
+			scoreboard players operation @s aS.node.h > #dy aS.v
+			scoreboard players operation @s aS.node.h > #dz aS.v
 
-			# Get largest axis
-			scoreboard players set #dmax aS.v 0
-			scoreboard players operation #dmax aS.v > #x aS.v
-			scoreboard players operation #dmax aS.v > #y aS.v
-			scoreboard players operation #dmax aS.v > #z aS.v
+			# Get the middle value of the difference
+			# diff_mid = (dx + dy + dz - diff_min - diff_max)
+			scoreboard players operation #diff_mid aS.v += #dy aS.v
+			scoreboard players operation #diff_mid aS.v += #dz aS.v
+			scoreboard players operation #diff_mid aS.v -= #diff_min aS.v
+			scoreboard players operation #diff_mid aS.v -= @s aS.node.h
 
-			# Get mid difference
-			# dmid = dx + dy + dz - dmin - dmax
-			# dx + dy + dz
-			scoreboard players operation #dmid aS.v = #x aS.v
-			scoreboard players operation #dmid aS.v += #y aS.v
-			scoreboard players operation #dmid aS.v += #z aS.v
-			# dmin - dmax
-			scoreboard players operation #dmid aS.v -= #dmin aS.v
-			scoreboard players operation #dmid aS.v -= #dmax aS.v
+			# ----------------------- #
+			# Calculate the heuristic #
+			# ----------------------- #
+			# This is using a HEAVILY reduced version of this formula:
+			# ((c - b) * diff_min) + ((b - a) * diff_mid) + (a * diff_max)
+			# Since c and b are equal, subtracting, then multiplying them by diff_min is redundant
+			# ((b - a) * diff_mid) + (a * diff_max)
+			# b - a = 4, so we can just multiply diff_mid by 4
+			# (4 * diff_mid) + (a * diff_max)
+			# a = 10, so we can just multiply diff_max by 10
+			# (10 * diff_max) + (4 * diff_mid)
+			# ----------------------- #
 
-			# Perform this operation on the collected values
-			# ((c - b) * dmin) + ((b - a) * dmid) + (a * dmax)
-			scoreboard players operation #a aS.v = $astar.straight_movement_cost aS.v
-			scoreboard players operation #b aS.v = $astar.diagonal_movement_cost aS.v
-			scoreboard players operation #c aS.v = $astar.vertical_movement_cost aS.v
-			# cb = (c - b)
-			scoreboard players operation #c aS.v -= #b aS.v
-			# ba = (b - a)
-			scoreboard players operation #b aS.v -= #a aS.v
-			# admax = (a * dmax)
-			scoreboard players operation #a aS.v *= #dmax aS.v
-			# badmid = (ba * dmid)
-			scoreboard players operation #b aS.v *= #dmid aS.v
-			# cbdmin = (bc * dmin)
-			scoreboard players operation #c aS.v *= #dmin aS.v
-			# (cbdmin + bdmid + admax)
-			scoreboard players operation #c aS.v += #b aS.v
-			scoreboard players operation #c aS.v += #a aS.v
+			# a = (10 * diff_max)
+			scoreboard players operation @s aS.node.h *= #10 aS.v
+			# b = (4 * diff_mid)
+			scoreboard players operation #diff_mid aS.v *= #4 aS.v
+			# (a + b)
+			execute store result score @s aS.node.f run scoreboard players operation @s aS.node.h += #diff_mid aS.v
 
-			# Set node.h to the end result
-			scoreboard players operation @s aS.node.h = #c aS.v
-
-			#> G Cost
-			# aS.move_cost is calculated in the summon command and set based on the move being made. Eg straight, diagonal, or vertical
-			scoreboard players operation @s aS.node.g = #aS.move_cost aS.v
-
-			# Multiply cost based on block
-			# execute if block ~ ~-1 ~ #astar:weighted2x run scoreboard players operation @s aS.node.g *= #2 aS.v
-			# execute if block ~ ~-1 ~ #astar:weighted4x run scoreboard players operation @s aS.node.g *= #4 aS.v
-			# execute if block ~ ~-1 ~ #astar:weighted8x run scoreboard players operation @s aS.node.g *= #8 aS.v
-			# execute if block ~ ~-1 ~ #astar:weighted16x run scoreboard players operation @s aS.node.g *= #16 aS.v
-
-			# Add the parent's g cost
+			# G cost
+			# The value of #aS.this_move_cost is calculated when the node is created, and is based on the direction from the parent.
+			scoreboard players operation @s aS.node.g = #aS.this_move_cost aS.v
 			scoreboard players operation @s aS.node.g += #aS.parent.g aS.v
-
-			#> F Cost
-			# (node.g + node.h)
-			scoreboard players operation @s aS.node.f = @s aS.node.g
-			scoreboard players operation @s aS.node.f += @s aS.node.h
-
-			#> Store minimum costs in global variables
-			scoreboard players operation #aS.global_min_f aS.v < @s aS.node.f
-			scoreboard players operation #aS.global_min_h aS.v < @s aS.node.h
-			# scoreboard players operation #aS.global_min_g aS.v < @s aS.node.g
+			# F cost
+			# h cost was added in the last calc step of the heuristic
+			scoreboard players operation @s aS.node.f += @s aS.node.g
 		}
 	}
 
-	function clock {
-		schedule function astar:clock 1t
+	dir exploration_cache {
+		function add {
+			#$ Args: {pos: [int, int, int]}
+			$data modify storage astar:_ exploration_cache."$(pos)" set value 1b
+		}
+
+		function clear {
+			data remove storage astar:_ exploration_cache
+			data modify storage astar:_ exploration_cache set value {}
+		}
 	}
 }
 
