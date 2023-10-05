@@ -29,6 +29,8 @@ function load {
 	# Variables
 	scoreboard players add #aS.last_path_id aS.v 0
 
+	scoreboard players set $aS.enable_3d aS.v 0
+
 	scoreboard players set $aS.max_mspt aS.v 20
 	scoreboard players set $aS.orthogonal_cost aS.v 10
 	scoreboard players set $aS.diagonal_cost aS.v 14
@@ -51,6 +53,18 @@ function load {
 	execute unless data storage astar:_ queue run data modify storage astar:_ queue set value []
 }
 
+blocks can_path_on {
+	minecraft:gray_concrete
+	minecraft:red_concrete
+	minecraft:lime_concrete
+}
+
+blocks can_path_through {
+	minecraft:air
+	minecraft:cave_air
+	minecraft:void_air
+}
+
 dir debug {
 	function map_h_cost {
 		kill @e[tag=aS.debug]
@@ -59,9 +73,10 @@ dir debug {
 				execute positioned <%x-5%> <%1%> <%z-5%> summon minecraft:text_display run {
 					tag @s add aS.debug
 					function astar:_/node/calculate
-					data modify entity @s text set value '[{"score":{"name":"@s","objective":"aS.node.h"}}, " ", {"score":{"name":"@s","objective":"aS.node.g"}}, "\\n", {"score":{"name":"@s","objective":"aS.node.f"}}]'
+					data modify entity @s text set value '["h", {"score":{"name":"@s","objective":"aS.node.h"}}, " g", {"score":{"name":"@s","objective":"aS.node.g"}}, "\\nf", {"score":{"name":"@s","objective":"aS.node.f"}}]'
 					data modify entity @s transformation.right_rotation set value {axis:[1, 0, 0], angle:-1.5}
-					data modify entity @s transformation.translation set value [0f,0f,0.25f]
+					data modify entity @s transformation.translation set value [0f,0f,0.125f]
+					data modify entity @s transformation.scale set value [0.5f,0.5f,0.5f]
 					data modify entity @s background set value 0
 				}
 			}
@@ -98,10 +113,73 @@ dir _ {
 				scoreboard players set @s aS.node.id
 			}
 		}
+
+		function spread {
+			scoreboard players operation #aS.parent.g aS.v = @s aS.node.g
+
+			execute if score $aS.enable_3d aS.v matches 0 run {
+				LOOP (3,y) {
+					LOOP (3,x) {
+						LOOP (3,z) {
+							execute store result score #x<%x-1%>y<%y-1%>z<%z-1%> aS.v unless block ~<%x-1%> ~<%y-1%> ~<%z-1%> #astar:can_path_through
+						}
+					}
+				}
+
+				# Orthogonal flat movement validation
+				scoreboard players operation #aS.move_cost aS.v = $astar.straight_movement_cost aS.v
+				LOOP(3,x){
+					LOOP(3,z){
+						!IF(x-1 != 0 ? !(z-1 != 0) : z-1 != 0){
+							(
+								execute
+								if score #x<%x-1%>y-1z<%z-1%> aS.v matches 1
+								if score #x<%x-1%>y0z<%z-1%> aS.v matches 0
+								if score #x<%x-1%>y1z<%z-1%> aS.v matches 0
+								positioned ~<%x-1%> ~ ~<%z-1%>
+								if block ~ ~-1 ~ #astar:can_path_on
+								run function astar:_/search/node/update
+							)
+						}
+					}
+				}
+
+				# Diagonal flat movement validation
+				scoreboard players operation #aS.move_cost aS.v = $astar.diagonal_movement_cost aS.v
+				LOOP(3,x){
+					LOOP(3,z){
+						!IF(x-1 != 0 && z-1 != 0){
+							(
+								execute
+								if score #x<%x-1%>y-1z<%z-1%> aS.v matches 1
+								if score #x<%x-1%>y0z<%z-1%> aS.v matches 0
+								if score #x<%x-1%>y1z<%z-1%> aS.v matches 0
+								if score #x0y0z<%z-1%> aS.v matches 0
+								if score #x0y1z<%z-1%> aS.v matches 0
+								if score #x<%x-1%>y0z0 aS.v matches 0
+								if score #x<%x-1%>y1z0 aS.v matches 0
+								positioned ~<%x-1%> ~ ~<%z-1%>
+								if block ~ ~-1 ~ #astar:can_path_on
+								run function astar:_/search/node/update
+							)
+						}
+					}
+				}
+			}
+
+		}
 	}
 
 	dir node {
 		function create {
+			execute summon marker run {
+				tag @s add aS.node
+				function astar:_/node/calculate
+			}
+		}
+
+		function update {
+			
 		}
 
 		function test {
