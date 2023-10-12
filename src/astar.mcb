@@ -172,14 +172,18 @@ dir _ {
 
 	dir node {
 		function create {
-			execute summon marker run {
-				tag @s add aS.node
-				function astar:_/node/calculate
-			}
+			execute summon minecraft:marker run function astar:_/node/calculate
 		}
 
 		function update {
-			
+			scoreboard players set #ifelse aS.v 0
+			execute as @e[type=minecraft:marker,tag=aS.node,distance=..0.1,limit=1] run {
+				say Updating node
+				scoreboard players set #ifelse aS.v 1
+			}
+			execute if score #ifelse aS.v matches 1 run return 0
+			# Summon new node
+			execute summon minecraft:marker run function astar:_/node/calculate
 		}
 
 		function test {
@@ -191,6 +195,8 @@ dir _ {
 		}
 
 		function calculate {
+			tag @s add aS.node
+
 			data modify storage astar:_ Pos set from entity @s Pos
 			execute store result score #diff_mid aS.v store result score @s aS.node.x run data get storage astar:_ Pos[0]
 			execute store result score #dy aS.v store result score @s aS.node.y run data get storage astar:_ Pos[1]
